@@ -73,3 +73,33 @@ class PageTests(TestCase):
   self.client.force_login(self.user);self.assertEqual(self.client.get("/telemetry/logout/").status_code,405)
  def test_login_csrf_required(self):
   c=Client(enforce_csrf_checks=True);self.assertEqual(c.post("/telemetry/login/",{"username":"operator","password":"password-test"}).status_code,403)
+
+
+class UserManagementTests(TestCase):
+ def setUp(self):
+  U=get_user_model()
+  self.admin=U.objects.create_superuser(username="administrator",password="AdminTest-42!long")
+  self.viewer=U.objects.create_user(username="viewer",password="ViewerTest-42!long")
+ def test_admin_can_create_regular_viewer(self):
+  self.client.force_login(self.admin)
+  response=self.client.post("/telemetry/admin/auth/user/add/",{"username":"newviewer","usable_password":"true","password1":"Distinct-Viewer-Pass!482","password2":"Distinct-Viewer-Pass!482","_save":"Save"})
+  self.assertEqual(response.status_code,302)
+  user=get_user_model().objects.get(username="newviewer")
+  self.assertTrue(user.check_password("Distinct-Viewer-Pass!482"));self.assertTrue(user.is_active);self.assertFalse(user.is_staff);self.assertFalse(user.is_superuser)
+ def test_viewer_cannot_view_or_create_users(self):
+  self.client.force_login(self.viewer)
+  self.assertEqual(self.client.get("/telemetry/admin/auth/user/").status_code,302)
+  self.assertEqual(self.client.post("/telemetry/admin/auth/user/add/",{"username":"intruder"}).status_code,302)
+  self.assertFalse(get_user_model().objects.filter(username="intruder").exists())
+ def test_anonymous_redirected_to_admin_login(self):
+  self.assertEqual(self.client.get("/telemetry/admin/auth/user/").status_code,302)
+ def test_admin_password_reset(self):
+  self.client.force_login(self.admin)
+  response=self.client.post(f"/telemetry/admin/auth/user/{self.viewer.pk}/password/",{"password1":"Changed-Viewer-Pass!482","password2":"Changed-Viewer-Pass!482"})
+  self.assertEqual(response.status_code,302);self.viewer.refresh_from_db();self.assertTrue(self.viewer.check_password("Changed-Viewer-Pass!482"))
+ def test_deactivated_account_session_cannot_access_dashboard(self):
+  self.client.force_login(self.viewer);self.viewer.is_active=False;self.viewer.save()
+  self.assertEqual(self.client.get("/telemetry/").status_code,302)
+ def test_admin_post_requires_csrf(self):
+  client=Client(enforce_csrf_checks=True);client.force_login(self.admin)
+  self.assertEqual(client.post("/telemetry/admin/auth/user/add/",{"username":"no-csrf"}).status_code,403)

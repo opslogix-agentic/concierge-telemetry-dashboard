@@ -2,10 +2,10 @@ from pathlib import Path
 SECRET_KEY = "test-only-key-not-for-deployment"
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost"]
-INSTALLED_APPS = ["django.contrib.auth","django.contrib.contenttypes","django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","inventory"]
-MIDDLEWARE = ["django.contrib.sessions.middleware.SessionMiddleware","django.middleware.csrf.CsrfViewMiddleware","django.contrib.auth.middleware.AuthenticationMiddleware"]
+INSTALLED_APPS = ["django.contrib.admin","django.contrib.auth","django.contrib.contenttypes","django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","inventory"]
+MIDDLEWARE = ["django.contrib.sessions.middleware.SessionMiddleware","django.middleware.csrf.CsrfViewMiddleware","django.contrib.auth.middleware.AuthenticationMiddleware","django.contrib.messages.middleware.MessageMiddleware"]
 ROOT_URLCONF = "dashboard.urls"
-TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[Path(__file__).resolve().parent.parent/"templates"],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.request","django.contrib.auth.context_processors.auth"]}}]
+TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[Path(__file__).resolve().parent.parent/"templates"],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
 DATABASES = {"default":{"ENGINE":"django.db.backends.sqlite3","NAME":":memory:"}}
 LOGIN_URL = "/telemetry/login/"
 LOGIN_REDIRECT_URL = "/telemetry/"

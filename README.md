@@ -2,6 +2,13 @@
 
 Django 5.2 dashboard for Cerebral Palsy of the North Country. Internal URL: `http://10.1.96.3/telemetry/` (or controller hostname). Separate Django login; change password via the header. All authenticated dashboard users can view this client's inventory. No public signup, inventory editing or monitoring acknowledgement actions.
 
+## Manage dashboard users
+
+Sign in as cchavez (or another dashboard administrator), then choose **Manage users** in the header, or open `/telemetry/admin/auth/user/`. Select **Add user**, enter a unique username and password, then save. Share the initial password securely; each user can change it from the dashboard header. Set email/name on the user edit page as needed. Regular viewers need only Active checked; leave Staff status and Superuser status unchecked. All active dashboard viewers can read this client’s inventory.
+
+Administrators can deactivate accounts by unchecking Active, reset passwords using the password-change link on a user’s edit page, and create other full administrators by setting both Staff status and Superuser status. Staff alone allows administration login but does not grant user-management permissions. Only grant full administrator access to trusted operators. The existing Django administrator account remains unchanged. Users and passwords are separate from Icinga accounts; no email invitation/reset delivery is configured.
+
+
 ## What it shows
 
 Location-grouped devices with search/filter by hostname, IP, model, serial and alert status. Device pages include identity/software/uptime, collector assignment, interfaces, addresses, allowed VLANs, stack members, inventory power/fans/temperature, persisted Icinga host/service results, and live controller CPU/memory/environment health. Missing results and source failures show UNKNOWN, never inferred healthy. Stale telemetry is labeled using the fast-health snapshot timestamp, independently of hourly inventory. Snapshot access is read-only under the existing telemetry service user. Acknowledgement/downtime do not hide faults.
