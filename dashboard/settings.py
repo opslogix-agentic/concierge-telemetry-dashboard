@@ -34,3 +34,5 @@ X_FRAME_OPTIONS = "DENY"
 CONTROLLER_URL = "http://127.0.0.1:8080"
 MONITOR_TOKEN_FILE = os.environ.get("MONITOR_TOKEN_FILE","/etc/concierge-telemetry-dashboard/monitor.token")
 TELEMETRY_STALE_SECONDS = 600
+
+TENANT_UUID = "56837d67-b68e-11f1-8cf6-5a0006aa6c1c"

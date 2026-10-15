@@ -37,6 +37,8 @@ if not bootstrap.exists():
  run([python,"manage.py","shell","-c",code],cwd=ROOT,env=process_env,input=json.dumps(credential),text=True)
  bootstrap.write_text(json.dumps(credential));bootstrap.chmod(0o600)
 backup=Path("/var/backups/concierge-dashboard")/datetime.now().strftime("%Y%m%d-%H%M%S");backup.mkdir(parents=True,mode=0o700)
+for original in ["/etc/haproxy/haproxy.cfg","/etc/apache2/sites-available/000-default.conf"]:
+ if Path(original).exists():shutil.copy2(original,backup/Path(original).name)
 files={"concierge-telemetry-dashboard.service":"/etc/systemd/system/concierge-telemetry-dashboard.service","haproxy-dashboard.cfg":"/etc/haproxy/concierge-dashboard.cfg","haproxy-dashboard.conf":"/etc/systemd/system/haproxy.service.d/concierge-dashboard.conf","apache-dashboard.conf":"/etc/apache2/conf-available/concierge-dashboard.conf"}
 for source,destination in files.items():
  dest=Path(destination);dest.parent.mkdir(parents=True,exist_ok=True)

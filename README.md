@@ -14,7 +14,7 @@ Browser → existing Apache :80 `/telemetry/` → HAProxy `127.0.0.1:8082` → G
 
 The original HAProxy service loaded only its base config, with no frontend listeners. Existing `/etc/haproxy/conf.d/services.cfg` was unused, references a missing certificate, and conflicts with Apache :80; do not activate it wholesale. A dedicated systemd drop-in loads only the dashboard config alongside the existing base. All other Apache paths and the telemetry API :8080 remain as configured.
 
-MariaDB `concierge_dashboard` stores Django auth/sessions/migrations only. Separate SELECT-only account reads `prod_telemetry` inventory and four IcingaDB tables. Inventory has no Django managed models; database router disallows migrations to telemetry/icinga. Controller health API uses a local, tenant-scoped monitor token. No credentials in Git. Internal HTTP is used because no DNS/TLS certificates are available; use only the trusted internal network/VPN.
+MariaDB `concierge_dashboard` stores Django auth/sessions/migrations only. Inventory is restricted to the CP North tenant UUID. Separate SELECT-only account reads `prod_telemetry` inventory and four IcingaDB tables. Inventory has no Django managed models; database router disallows migrations to telemetry/icinga. Controller health API uses a local, tenant-scoped monitor token. No credentials in Git. Internal HTTP is used because no DNS/TLS certificates are available; use only the trusted internal network/VPN.
 
 ## Deployment
 

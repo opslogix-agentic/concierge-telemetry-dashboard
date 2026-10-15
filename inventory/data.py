@@ -22,7 +22,7 @@ def devices():
     return rows("telemetry", """SELECT d.*,l.name AS location_name,l.location_uuid,t.name AS tenant_name,t.tenant_uuid,a.appliance_id AS collector,
     (SELECT COUNT(*) FROM network_interfaces i WHERE i.device_id=d.id AND i.enabled=1) AS interface_count,
     (SELECT COUNT(*) FROM network_device_stack_members m WHERE m.device_id=d.id AND m.enabled=1) AS member_count
-    FROM network_devices d JOIN locations l ON l.id=d.location_id JOIN tenants t ON t.id=l.tenant_id LEFT JOIN appliances a ON a.id=d.assigned_appliance_id ORDER BY l.name,d.hostname""")
+    FROM network_devices d JOIN locations l ON l.id=d.location_id JOIN tenants t ON t.id=l.tenant_id LEFT JOIN appliances a ON a.id=d.assigned_appliance_id WHERE t.tenant_uuid=%s ORDER BY l.name,d.hostname""",(settings.TENANT_UUID,))
 
 def alert_rows():
     service = rows("icinga", """SELECT h.name AS hostname,s.name AS name,ss.soft_state AS code,ss.hard_state AS hard_code,ss.state_type,ss.output,ss.last_update,ss.is_overdue,ss.is_acknowledged,ss.in_downtime FROM host h JOIN service s ON s.host_id=h.id LEFT JOIN service_state ss ON ss.service_id=s.id""")
