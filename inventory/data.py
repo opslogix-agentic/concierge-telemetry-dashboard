@@ -1,0 +1,80 @@
+"""SELECT-only access to existing inventory and persisted Icinga states."""
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode, quote
+from django.conf import settings
+from django.db import connections
+
+LABELS = {0:"OK",1:"WARNING",2:"CRITICAL",3:"UNKNOWN"}
+RANK = {"OK":0,"UNKNOWN":1,"WARNING":2,"CRITICAL":3}
+
+def rows(alias, sql, params=()):
+    if not sql.lstrip().upper().startswith("SELECT "):
+        raise ValueError("Inventory connections only support SELECT")
+    with connections[alias].cursor() as c:
+        c.execute(sql, params)
+        return [dict(zip([x[0] for x in c.description],r)) for r in c.fetchall()]
+
+def devices():
+    return rows("telemetry", """SELECT d.*,l.name AS location_name,l.location_uuid,t.name AS tenant_name,t.tenant_uuid,a.appliance_id AS collector,
+    (SELECT COUNT(*) FROM network_interfaces i WHERE i.device_id=d.id AND i.enabled=1) AS interface_count,
+    (SELECT COUNT(*) FROM network_device_stack_members m WHERE m.device_id=d.id AND m.enabled=1) AS member_count
+    FROM network_devices d JOIN locations l ON l.id=d.location_id JOIN tenants t ON t.id=l.tenant_id LEFT JOIN appliances a ON a.id=d.assigned_appliance_id ORDER BY l.name,d.hostname""")
+
+def alert_rows():
+    service = rows("icinga", """SELECT h.name AS hostname,s.name AS name,ss.soft_state AS code,ss.hard_state AS hard_code,ss.state_type,ss.output,ss.last_update,ss.is_overdue,ss.is_acknowledged,ss.in_downtime FROM host h JOIN service s ON s.host_id=h.id LEFT JOIN service_state ss ON ss.service_id=s.id""")
+    host = rows("icinga", """SELECT h.name AS hostname,'Host reachability' AS name,hs.soft_state AS code,hs.hard_state AS hard_code,hs.state_type,hs.output,hs.last_update,hs.is_overdue,hs.is_acknowledged,hs.in_downtime FROM host h LEFT JOIN host_state hs ON hs.host_id=h.id""")
+    for a in service+host:
+        host_check=a["name"]=="Host reachability"
+        a["status"] = ("OK" if a["code"]==0 else "CRITICAL" if a["code"] is not None else "UNKNOWN") if host_check else LABELS.get(a["code"],"UNKNOWN")
+        a["hard_status"] = ("OK" if a["hard_code"]==0 else "CRITICAL" if a["hard_code"] is not None else "UNKNOWN") if host_check else LABELS.get(a["hard_code"],"UNKNOWN")
+        a["updated"] = datetime.fromtimestamp(a["last_update"]/1000,timezone.utc) if a["last_update"] else None
+        if a["code"] is None:a["status"]="UNKNOWN";a["output"]="No check result recorded"
+        a["overdue"] = a["is_overdue"]=="y"
+    return service+host
+
+def attach_alerts(items, alerts):
+    by_host={}
+    for a in alerts:by_host.setdefault(a["hostname"].casefold(),[]).append(a)
+    for d in items:
+        d["alerts"] = sorted(by_host.get(d["hostname"].casefold(),[]),key=lambda a:(-RANK[a["status"]],a["name"]))
+        d["alert_status"] = max((a["status"] for a in d["alerts"]),key=lambda s:RANK[s],default="UNKNOWN")
+        d["problem_count"] = sum(a["status"]!="OK" for a in d["alerts"])
+        dt=d.get("telemetry_collected_at")
+        if dt and dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+        d["telemetry_stale"] = dt is None or (datetime.now(timezone.utc)-dt).total_seconds()>settings.TELEMETRY_STALE_SECONDS
+    return items
+
+def tables(device_id):
+    specs = [
+      ("Interfaces", "SELECT i.* FROM network_interfaces i WHERE i.device_id=%s ORDER BY i.name"),
+      ("Interface addresses", "SELECT i.name AS interface_name,p.address,p.prefix_length FROM network_interface_ip_addresses p JOIN network_interfaces i ON i.id=p.interface_id WHERE i.device_id=%s ORDER BY i.name,p.address"),
+      ("Allowed VLANs", "SELECT i.name AS interface_name,v.vlan_id FROM network_interface_allowed_vlans v JOIN network_interfaces i ON i.id=v.interface_id WHERE i.device_id=%s ORDER BY i.name,v.vlan_id"),
+      ("Stack members", "SELECT m.* FROM network_device_stack_members m WHERE m.device_id=%s ORDER BY m.member_id"),
+      ("Power supplies (inventory)", "SELECT m.member_id,p.* FROM network_device_power_supplies p JOIN network_device_stack_members m ON m.id=p.stack_member_id WHERE m.device_id=%s ORDER BY m.member_id,p.slot"),
+      ("Fans (inventory)", "SELECT m.member_id,f.* FROM network_device_fans f JOIN network_device_stack_members m ON m.id=f.stack_member_id WHERE m.device_id=%s ORDER BY m.member_id,f.fan_id"),
+      ("Temperature sensors (inventory)", "SELECT m.member_id,s.* FROM network_device_temperature_sensors s JOIN network_device_stack_members m ON m.id=s.stack_member_id WHERE m.device_id=%s ORDER BY m.member_id,s.name"),
+    ]
+    result=[]
+    hidden={"id","device_id","stack_member_id","first_seen_at"}
+    for title,sql in specs:
+        records=rows("telemetry",sql,(device_id,))
+        keys=[k for k in records[0] if k not in hidden] if records else []
+        result.append({"title":title,"columns":[k.replace("_"," ").title() for k in keys],"rows":[[r[k] for k in keys] for r in records],"count":len(records)})
+    return result
+
+def health(device):
+    resources=["cpu","memory","temperature","fans","power"]
+    try:token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
+    except OSError:return [{"resource":r,"status":"UNKNOWN","message":"Controller health credential is unavailable"} for r in resources]
+    scope=urlencode({"tenant_uuid":device["tenant_uuid"],"location_uuid":device["location_uuid"]})
+    def get(resource):
+        url=settings.CONTROLLER_URL+"/api/v1/health/network/"+quote(device["hostname"],safe="")+"/"+resource+"?"+scope
+        try:
+            with urlopen(Request(url,headers={"Authorization":"Bearer "+token}),timeout=4) as response:d=json.load(response)
+            return {"resource":resource,"status":d.get("status","UNKNOWN"),"message":"; ".join(x.get("message","") for x in d.get("checks",{}).values()),"details":json.dumps(d.get("details",[]),indent=2),"age":d.get("age_seconds")}
+        except Exception:return {"resource":resource,"status":"UNKNOWN","message":"Live controller health is unavailable"}
+    with ThreadPoolExecutor(max_workers=5) as pool:return list(pool.map(get,resources))

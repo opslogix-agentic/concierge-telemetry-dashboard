@@ -1,0 +1,20 @@
+from pathlib import Path
+SECRET_KEY = "test-only-key-not-for-deployment"
+DEBUG = False
+ALLOWED_HOSTS = ["testserver", "localhost"]
+INSTALLED_APPS = ["django.contrib.auth","django.contrib.contenttypes","django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","inventory"]
+MIDDLEWARE = ["django.contrib.sessions.middleware.SessionMiddleware","django.middleware.csrf.CsrfViewMiddleware","django.contrib.auth.middleware.AuthenticationMiddleware"]
+ROOT_URLCONF = "dashboard.urls"
+TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[Path(__file__).resolve().parent.parent/"templates"],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.request","django.contrib.auth.context_processors.auth"]}}]
+DATABASES = {"default":{"ENGINE":"django.db.backends.sqlite3","NAME":":memory:"}}
+LOGIN_URL = "/telemetry/login/"
+LOGIN_REDIRECT_URL = "/telemetry/"
+LOGOUT_REDIRECT_URL = LOGIN_URL
+STATIC_URL = "/telemetry/static/"
+USE_TZ = True
+TIME_ZONE = "America/New_York"
+CONTROLLER_URL = "http://127.0.0.1:8080"
+MONITOR_TOKEN_FILE = "/nonexistent/test-token"
+TELEMETRY_STALE_SECONDS = 600
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
