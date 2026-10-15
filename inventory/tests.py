@@ -21,6 +21,13 @@ class StateTests(SimpleTestCase):
   d=sample();d["telemetry_collected_at"]=datetime.now(timezone.utc)-timedelta(hours=1)
   self.assertTrue(data.attach_alerts([d],[])[0]["telemetry_stale"])
   d["telemetry_collected_at"]=None;self.assertTrue(data.attach_alerts([d],[])[0]["telemetry_stale"])
+ @patch("inventory.data.health_timestamp",return_value=datetime.now(timezone.utc))
+ def test_fresh_health_overrides_old_inventory_marker(self,_):
+  d=sample();d["telemetry_collected_at"]=datetime.now(timezone.utc)-timedelta(hours=1)
+  result=data.attach_alerts([d],[])[0];self.assertFalse(result["telemetry_stale"]);self.assertIsNotNone(result["inventory_collected_at"])
+ def test_health_path_rejects_traversal(self):
+  d=sample();d.update(tenant_uuid="tenant",location_uuid="location",hostname="../host")
+  self.assertIsNone(data.health_timestamp(d))
  def test_write_query_rejected_before_db_access(self):
   with self.assertRaises(ValueError):data.rows("telemetry","DELETE FROM network_devices")
  def test_migrations_restricted_to_app_database(self):

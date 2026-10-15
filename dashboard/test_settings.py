@@ -18,3 +18,5 @@ MONITOR_TOKEN_FILE = "/nonexistent/test-token"
 TELEMETRY_STALE_SECONDS = 600
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+STATE_ROOT = "/nonexistent/test-state"

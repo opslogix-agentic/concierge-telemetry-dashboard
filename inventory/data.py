@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import json
+import re
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode, quote
@@ -36,6 +37,16 @@ def alert_rows():
         a["overdue"] = a["is_overdue"]=="y"
     return service+host
 
+def health_timestamp(device):
+    parts=[device.get("tenant_uuid",""),device.get("location_uuid",""),device["hostname"].lower()]
+    if not all(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*",str(p)) for p in parts):return None
+    path=Path(settings.STATE_ROOT)/"tenants"/parts[0]/"locations"/parts[1]/"network"/parts[2]/"health.json"
+    try:
+        document=json.loads(path.read_text())
+        dt=datetime.fromisoformat(document["collected_at"].replace("Z","+00:00"))
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    except (OSError,ValueError,KeyError,TypeError):return None
+
 def attach_alerts(items, alerts):
     by_host={}
     for a in alerts:by_host.setdefault(a["hostname"].casefold(),[]).append(a)
@@ -43,8 +54,10 @@ def attach_alerts(items, alerts):
         d["alerts"] = sorted(by_host.get(d["hostname"].casefold(),[]),key=lambda a:(-RANK[a["status"]],a["name"]))
         d["alert_status"] = max((a["status"] for a in d["alerts"]),key=lambda s:RANK[s],default="UNKNOWN")
         d["problem_count"] = sum(a["status"]!="OK" for a in d["alerts"])
-        dt=d.get("telemetry_collected_at")
-        if dt and dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+        d["inventory_collected_at"] = d.get("telemetry_collected_at")
+        # SQL marker advances on hourly inventory; freshness must use fast health.
+        d["telemetry_collected_at"] = health_timestamp(d)
+        dt=d["telemetry_collected_at"]
         d["telemetry_stale"] = dt is None or (datetime.now(timezone.utc)-dt).total_seconds()>settings.TELEMETRY_STALE_SECONDS
     return items
 

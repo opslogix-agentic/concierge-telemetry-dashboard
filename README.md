@@ -4,7 +4,7 @@ Django 5.2 dashboard for Cerebral Palsy of the North Country. Internal URL: `htt
 
 ## What it shows
 
-Location-grouped devices with search/filter by hostname, IP, model, serial and alert status. Device pages include identity/software/uptime, collector assignment, interfaces, addresses, allowed VLANs, stack members, inventory power/fans/temperature, persisted Icinga host/service results, and live controller CPU/memory/environment health. Missing results and source failures show UNKNOWN, never inferred healthy. Stale telemetry is labeled. Acknowledgement/downtime do not hide faults.
+Location-grouped devices with search/filter by hostname, IP, model, serial and alert status. Device pages include identity/software/uptime, collector assignment, interfaces, addresses, allowed VLANs, stack members, inventory power/fans/temperature, persisted Icinga host/service results, and live controller CPU/memory/environment health. Missing results and source failures show UNKNOWN, never inferred healthy. Stale telemetry is labeled using the fast-health snapshot timestamp, independently of hourly inventory. Snapshot access is read-only under the existing telemetry service user. Acknowledgement/downtime do not hide faults.
 
 Icinga database soft state is the displayed current persisted result, with hard state, output, overdue/ack/downtime and state update timestamp on details. IcingaDB does not necessarily update timestamps on every unchanged check; these timestamps are not heartbeats. Live controller health is fetched separately on device detail. Existing sensor inventory tables can contain older values; live health is labeled distinctly. No auto-refresh during inspection; use Refresh or reload.
 
