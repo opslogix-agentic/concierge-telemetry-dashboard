@@ -29,10 +29,10 @@ def overview(request):
         return render(request,"inventory/error.html",status=503)
     locations=sorted({d["location_name"] for d in items});query=request.GET.get("q","").strip();location=request.GET.get("location","");status=request.GET.get("status","")
     totals={"devices":len(items),"locations":len(locations),"problems":sum(d["alert_status"] in {"CRITICAL","WARNING"} for d in items),"unknown":sum(d["alert_status"]=="UNKNOWN" for d in items)}
-    filtered=[d for d in items if (not location or d["location_name"]==location) and (not status or d["alert_status"]==status) and (not query or query.casefold() in " ".join(str(d.get(k) or "") for k in ["hostname","management_ip","model","serial_number","collector"]).casefold())]
+    filtered=[d for d in items if (not location or d["location_name"]==location) and (not status or d["alert_status"]==status) and (not query or query.casefold() in " ".join(str(d.get(k) or "") for k in ["hostname","display_name","management_ip","model","serial_number","collector"]).casefold())]
     grouped=defaultdict(list)
     for d in filtered:grouped[d["location_name"]].append(d)
-    return render(request,"inventory/overview.html",{"groups":dict(grouped),"locations":locations,"totals":totals,"query":query,"location":location,"status_filter":status,"error":error,"now":datetime.now(timezone.utc),"shown":len(filtered)})
+    return render(request,"inventory/overview.html",{"groups":dict(grouped),"locations":locations,"totals":totals,"query":query,"location":location,"status_filter":status,"error":error,"now":datetime.now(timezone.utc),"shown":len(filtered),"meraki_health":data.integration_health()})
 
 @login_required
 @never_cache
@@ -46,5 +46,5 @@ def device(request,device_id):
     try:tables=data.tables(device_id)
     except Exception:
         logger.exception("Device inventory read failed");return render(request,"inventory/error.html",status=503)
-    metadata=[(k.replace("_"," ").title(),v) for k,v in d.items() if k not in {"alerts","problem_count","alert_status","telemetry_stale","id","location_id","assigned_appliance_id","last_collected_by_appliance_id","tenant_uuid","location_uuid"}]
+    metadata=[(k.replace("_"," ").title(),v) for k,v in d.items() if k not in {"alerts","problem_count","alert_status","telemetry_stale","id","location_id","assigned_appliance_id","last_collected_by_appliance_id","tenant_uuid","location_uuid","meraki_integration_id","meraki_serial","meraki_collected_at","display_name"}]
     return render(request,"inventory/device.html",{"device":d,"metadata":metadata,"tables":tables,"health":data.health(d),"error":error})

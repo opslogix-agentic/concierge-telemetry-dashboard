@@ -43,6 +43,7 @@ class StateTests(SimpleTestCase):
 
 class PageTests(TestCase):
  def setUp(self):
+  mock=patch("inventory.views.data.integration_health",return_value=[]);mock.start();self.addCleanup(mock.stop)
   self.user=get_user_model().objects.create_user(username="operator",password="password-test")
  def test_login_required_for_inventory(self):
   self.assertEqual(self.client.get("/telemetry/").status_code,302);self.assertEqual(self.client.get("/telemetry/devices/1/").status_code,302)
@@ -103,3 +104,17 @@ class UserManagementTests(TestCase):
  def test_admin_post_requires_csrf(self):
   client=Client(enforce_csrf_checks=True);client.force_login(self.admin)
   self.assertEqual(client.post("/telemetry/admin/auth/user/add/",{"username":"no-csrf"}).status_code,403)
+
+
+class MerakiViewTests(SimpleTestCase):
+ @patch("inventory.data.Path.read_text",side_effect=OSError)
+ def test_cloud_devices_do_not_get_fake_cpu_fan_or_power_checks(self,_):
+  device=sample();device["meraki_integration_id"]=1;device["device_role"]="sensor"
+  self.assertEqual([x["resource"] for x in data.health(device)],["sensor-freshness","temperature","battery"])
+  device["device_role"]="access-point"
+  self.assertEqual([x["resource"] for x in data.health(device)],["availability"])
+ def test_cloud_freshness_uses_cloud_collection_not_ssh_state(self):
+  device=sample();device.update(meraki_integration_id=1,meraki_collected_at=datetime.now(timezone.utc))
+  self.assertFalse(data.attach_alerts([device],[])[0]["telemetry_stale"])
+  device["meraki_collected_at"]=datetime.now(timezone.utc)-timedelta(hours=1)
+  self.assertTrue(data.attach_alerts([device],[])[0]["telemetry_stale"])

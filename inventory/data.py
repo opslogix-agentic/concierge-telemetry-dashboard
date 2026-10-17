@@ -20,10 +20,18 @@ def rows(alias, sql, params=()):
         return [dict(zip([x[0] for x in c.description],r)) for r in c.fetchall()]
 
 def devices():
-    return rows("telemetry", """SELECT d.*,l.name AS location_name,l.location_uuid,t.name AS tenant_name,t.tenant_uuid,a.appliance_id AS collector,
+    items = rows("telemetry", """SELECT d.*,mi.integration_id AS meraki_integration_id,mi.serial AS meraki_serial,mh.collected_at AS meraki_collected_at,l.name AS location_name,l.location_uuid,t.name AS tenant_name,t.tenant_uuid,a.appliance_id AS collector,
     (SELECT COUNT(*) FROM network_interfaces i WHERE i.device_id=d.id AND i.enabled=1) AS interface_count,
     (SELECT COUNT(*) FROM network_device_stack_members m WHERE m.device_id=d.id AND m.enabled=1) AS member_count
-    FROM network_devices d JOIN locations l ON l.id=d.location_id JOIN tenants t ON t.id=l.tenant_id LEFT JOIN appliances a ON a.id=d.assigned_appliance_id WHERE t.tenant_uuid=%s ORDER BY l.name,d.hostname""",(settings.TENANT_UUID,))
+    FROM network_devices d JOIN locations l ON l.id=d.location_id JOIN tenants t ON t.id=l.tenant_id LEFT JOIN appliances a ON a.id=d.assigned_appliance_id LEFT JOIN meraki_device_identities mi ON mi.device_id=d.id LEFT JOIN meraki_health_snapshots mh ON mh.integration_id=mi.integration_id AND mh.resource=IF(d.device_role='sensor','sensors','availability') WHERE t.tenant_uuid=%s ORDER BY l.name,d.hostname""",(settings.TENANT_UUID,))
+    snapshots=rows("telemetry","""SELECT s.snapshot_json FROM meraki_discovery_snapshots s
+        JOIN meraki_integrations i ON i.id=s.integration_id JOIN tenants t ON t.id=i.tenant_id
+        WHERE t.tenant_uuid=%s""",(settings.TENANT_UUID,))
+    names={x["serial"]:x["name"] for row in snapshots for x in json.loads(row["snapshot_json"]).get("devices",[])}
+    for item in items:
+        item["display_name"]=names.get(item.get("meraki_serial"),item["hostname"])
+        item["telemetry_source"]="Meraki cloud" if item.get("meraki_integration_id") else "Client collector"
+    return items
 
 def alert_rows():
     service = rows("icinga", """SELECT h.name AS hostname,s.name AS name,ss.soft_state AS code,ss.hard_state AS hard_code,ss.state_type,ss.output,ss.last_update,ss.is_overdue,ss.is_acknowledged,ss.in_downtime FROM host h JOIN service s ON s.host_id=h.id LEFT JOIN service_state ss ON ss.service_id=s.id""")
@@ -38,6 +46,9 @@ def alert_rows():
     return service+host
 
 def health_timestamp(device):
+    if device.get("meraki_integration_id"):
+        dt=device.get("meraki_collected_at")
+        return dt.replace(tzinfo=timezone.utc) if dt and dt.tzinfo is None else dt
     parts=[device.get("tenant_uuid",""),device.get("location_uuid",""),device["hostname"].lower()]
     if not all(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*",str(p)) for p in parts):return None
     path=Path(settings.STATE_ROOT)/"tenants"/parts[0]/"locations"/parts[1]/"network"/parts[2]/"health.json"
@@ -52,6 +63,9 @@ def attach_alerts(items, alerts):
     for a in alerts:by_host.setdefault(a["hostname"].casefold(),[]).append(a)
     for d in items:
         d["alerts"] = sorted(by_host.get(d["hostname"].casefold(),[]),key=lambda a:(-RANK[a["status"]],a["name"]))
+        if d.get("meraki_integration_id"):
+            for alert in d["alerts"]:
+                if alert["name"]=="Host reachability":alert["name"]="Cloud monitoring anchor"
         d["alert_status"] = max((a["status"] for a in d["alerts"]),key=lambda s:RANK[s],default="UNKNOWN")
         d["problem_count"] = sum(a["status"]!="OK" for a in d["alerts"])
         d["inventory_collected_at"] = d.get("telemetry_collected_at")
@@ -80,14 +94,39 @@ def tables(device_id):
     return result
 
 def health(device):
-    resources=["cpu","memory","temperature","fans","power"]
+    meraki=bool(device.get("meraki_integration_id"))
+    resources=(["sensor-freshness","temperature","battery"] if device.get("device_role")=="sensor" else ["availability"]) if meraki else ["cpu","memory","temperature","fans","power"]
+    kind="meraki" if meraki else "network"
     try:token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
     except OSError:return [{"resource":r,"status":"UNKNOWN","message":"Controller health credential is unavailable"} for r in resources]
     scope=urlencode({"tenant_uuid":device["tenant_uuid"],"location_uuid":device["location_uuid"]})
     def get(resource):
-        url=settings.CONTROLLER_URL+"/api/v1/health/network/"+quote(device["hostname"],safe="")+"/"+resource+"?"+scope
+        url=settings.CONTROLLER_URL+"/api/v1/health/"+kind+"/"+quote(device["hostname"],safe="")+"/"+resource+"?"+scope
         try:
             with urlopen(Request(url,headers={"Authorization":"Bearer "+token}),timeout=4) as response:d=json.load(response)
             return {"resource":resource,"status":d.get("status","UNKNOWN"),"message":"; ".join(x.get("message","") for x in d.get("checks",{}).values()),"details":json.dumps(d.get("details",[]),indent=2),"age":d.get("age_seconds")}
         except Exception:return {"resource":resource,"status":"UNKNOWN","message":"Live controller health is unavailable"}
     with ThreadPoolExecutor(max_workers=5) as pool:return list(pool.map(get,resources))
+
+
+def integration_health():
+    """Read scoped controller state only; no vendor credentials or vendor requests."""
+    try:
+        integrations=rows("telemetry","""SELECT i.id,i.organization_id,l.location_uuid,t.tenant_uuid
+            FROM meraki_integrations i JOIN appliances a ON a.id=i.assigned_appliance_id
+            JOIN locations l ON l.id=a.location_id JOIN tenants t ON t.id=i.tenant_id
+            WHERE t.tenant_uuid=%s AND i.enabled=TRUE""",(settings.TENANT_UUID,))
+        token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
+    except Exception:return [{"organization":"Meraki","resource":"source","status":"UNKNOWN","message":"Meraki integration health is unavailable"}]
+    cards=[]
+    for integration in integrations:
+        query=urlencode({"tenant_uuid":integration["tenant_uuid"],"location_uuid":integration["location_uuid"]})
+        for resource in ["source","licensing"]:
+            card={"organization":integration["organization_id"],"resource":resource,"status":"UNKNOWN","message":"Controller health unavailable"}
+            try:
+                url=settings.CONTROLLER_URL+"/api/v1/health/meraki/integration-"+str(integration["id"])+"/"+resource+"?"+query
+                with urlopen(Request(url,headers={"Authorization":"Bearer "+token}),timeout=4) as response:body=json.load(response)
+                card.update(status=body["status"],message="; ".join(x["message"] for x in body["checks"].values()))
+            except Exception:pass
+            cards.append(card)
+    return cards

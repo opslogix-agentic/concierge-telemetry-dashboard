@@ -38,3 +38,15 @@ Tests use isolated SQLite for auth and mock inventory/monitoring; production use
 ## Rollback
 
 Stop/disable concierge-telemetry-dashboard, run `a2disconf concierge-dashboard`, validate and reload Apache. Remove only `/etc/systemd/system/haproxy.service.d/concierge-dashboard.conf`, daemon-reload and restart HAProxy to return to the original base configuration. Keep the new dashboard DB and configuration for investigation. Application updates roll back to a prior Git revision via the repo; do not edit production source. Existing telemetry and Icinga data are read-only and unchanged by deployment.
+
+## Meraki health
+
+The dashboard reads Meraki identities, resource collection timestamps and original
+cloud names from the existing tenant-scoped inventory, then requests normalized
+health from the controller. It never calls Meraki. AP/router/switch/camera pages show
+cloud availability; MT pages show sensor freshness, temperature and battery with
+actual reading timestamps. Unsupported CPU/fan/PSU resources are omitted. Organization
+source and licensing cards are separate from device connectivity. Temperature
+limits remain unconfigured during the silent pilot. A dedicated monitor token scoped
+to the client's approved locations can be selected using MONITOR_TOKEN_FILE; keep
+the previous token for rollback and do not broaden access to other tenants.
