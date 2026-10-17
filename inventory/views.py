@@ -43,7 +43,7 @@ def device(request,device_id):
         logger.exception("Inventory read failed");return render(request,"inventory/error.html",status=503)
     d=next((d for d in items if d["id"]==device_id),None)
     if d is None:raise Http404("Device not found")
-    try:tables=data.tables(device_id)
+    try:tables=[] if d.get("meraki_integration_id") and not d.get("local_polling_enabled",True) else data.tables(device_id)
     except Exception:
         logger.exception("Device inventory read failed");return render(request,"inventory/error.html",status=503)
     metadata=[(k.replace("_"," ").title(),v) for k,v in d.items() if k not in {"alerts","problem_count","alert_status","telemetry_stale","id","location_id","assigned_appliance_id","last_collected_by_appliance_id","tenant_uuid","location_uuid","meraki_integration_id","meraki_serial","meraki_collected_at","display_name"}]
