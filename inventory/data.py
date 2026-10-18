@@ -19,6 +19,22 @@ def rows(alias, sql, params=()):
         c.execute(sql, params)
         return [dict(zip([x[0] for x in c.description],r)) for r in c.fetchall()]
 
+def name_meraki_devices(items):
+    """Readable monitoring aliases; physical database identities remain stable."""
+    groups={}
+    for item in items:
+        if item.get("meraki_integration_id"):
+            slug=lambda value: re.sub(r"[^a-z0-9]+","-",str(value).lower()).strip("-")
+            base="meraki-"+slug(item["location_name"])+"-"+slug(item.get("model") or item.get("device_role") or "device")
+            groups.setdefault(base,[]).append(item)
+    for base,members in groups.items():
+        for index,item in enumerate(sorted(members,key=lambda x:x["hostname"]),1):
+            item["monitoring_name"]=base+(f"-{index:02d}" if len(members)>1 else "")
+    aliases=json.loads(Path(__file__).with_name("meraki_monitoring_aliases.json").read_text())
+    for item in items:
+        if item["hostname"] in aliases:item["monitoring_name"]=aliases[item["hostname"]]
+    return items
+
 def devices():
     items = rows("telemetry", """SELECT d.*,mi.integration_id AS meraki_integration_id,mi.serial AS meraki_serial,mh.collected_at AS meraki_collected_at,l.name AS location_name,l.location_uuid,t.name AS tenant_name,t.tenant_uuid,a.appliance_id AS collector,
     (SELECT COUNT(*) FROM network_interfaces i WHERE i.device_id=d.id AND i.enabled=1) AS interface_count,
@@ -31,7 +47,7 @@ def devices():
     for item in items:
         item["display_name"]=names.get(item.get("meraki_serial"),item["hostname"])
         item["telemetry_source"]="Meraki cloud" if item.get("meraki_integration_id") else "Client collector"
-    return items
+    return name_meraki_devices(items)
 
 def alert_rows():
     service = rows("icinga", """SELECT h.name AS hostname,s.name AS name,ss.soft_state AS code,ss.hard_state AS hard_code,ss.state_type,ss.output,ss.last_update,ss.is_overdue,ss.is_acknowledged,ss.in_downtime FROM host h JOIN service s ON s.host_id=h.id LEFT JOIN service_state ss ON ss.service_id=s.id""")
@@ -62,7 +78,7 @@ def attach_alerts(items, alerts):
     by_host={}
     for a in alerts:by_host.setdefault(a["hostname"].casefold(),[]).append(a)
     for d in items:
-        d["alerts"] = sorted(by_host.get(d["hostname"].casefold(),[]),key=lambda a:(-RANK[a["status"]],a["name"]))
+        d["alerts"] = sorted(by_host.get(d.get("monitoring_name",d["hostname"]).casefold(),by_host.get(d["hostname"].casefold(),[])),key=lambda a:(-RANK[a["status"]],a["name"]))
         if d.get("meraki_integration_id"):
             for alert in d["alerts"]:
                 if alert["name"]=="Host reachability":alert["name"]="Cloud monitoring anchor"

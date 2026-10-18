@@ -50,3 +50,9 @@ source and licensing cards are separate from device connectivity. Temperature
 limits remain unconfigured during the silent pilot. A dedicated monitor token scoped
 to the client's approved locations can be selected using MONITOR_TOKEN_FILE; keep
 the previous token for rollback and do not broaden access to other tenants.
+
+## Location navigation and Meraki names
+
+`/telemetry/` opens CP Locations (collector devices); `/telemetry/meraki/` opens Meraki devices and organization health. Each starts with location summary cards; select a location to see devices. Search and status filters operate within the selected category. Device detail returns to its category and location.
+
+Meraki labels use `meraki-<location>-<model>`, with numeric suffixes for repeated models. Pilot monitoring aliases are pinned in `inventory/meraki_monitoring_aliases.json` and match Icinga object names; keep these aligned when adding monitoring hosts. API targets, database hostnames, serial identities, and collector assignments remain unchanged.

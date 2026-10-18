@@ -53,7 +53,7 @@ class PageTests(TestCase):
  @patch("inventory.views.data.devices",side_effect=lambda:[sample()])
  def test_location_card_and_filters(self,devices,alerts):
   self.client.force_login(self.user)
-  response=self.client.get("/telemetry/");self.assertContains(response,"Canton");self.assertContains(response,"CRITICAL");self.assertContains(response,"CHC-SW-01-01")
+  response=self.client.get("/telemetry/?location=Canton");self.assertContains(response,"Canton");self.assertContains(response,"CRITICAL");self.assertContains(response,"CHC-SW-01-01")
   self.assertContains(self.client.get("/telemetry/?location=Malone"),"No devices match")
  @patch("inventory.views.data.alert_rows",side_effect=RuntimeError)
  @patch("inventory.views.data.devices",side_effect=lambda:[sample()])
@@ -118,3 +118,28 @@ class MerakiViewTests(SimpleTestCase):
   self.assertFalse(data.attach_alerts([device],[])[0]["telemetry_stale"])
   device["meraki_collected_at"]=datetime.now(timezone.utc)-timedelta(hours=1)
   self.assertTrue(data.attach_alerts([device],[])[0]["telemetry_stale"])
+
+
+class CategoryTests(TestCase):
+ def setUp(self):
+  self.user=get_user_model().objects.create_user(username="categories")
+  self.client.force_login(self.user)
+ @patch("inventory.views.data.integration_health",return_value=[])
+ @patch("inventory.views.data.alert_rows",return_value=[])
+ @patch("inventory.views.data.devices")
+ def test_categories_and_location_drilldown(self,devices,*_):
+  local=sample()
+  cloud=dict(sample(),id=2,hostname="meraki-serial",meraki_integration_id=1,display_name="Cloud AP")
+  devices.side_effect=lambda:[dict(local),dict(cloud)]
+  home=self.client.get("/telemetry/")
+  self.assertContains(home,"CP Locations");self.assertContains(home,"View devices")
+  self.assertNotContains(home,"Cloud AP");self.assertNotContains(home,"CHC-SW-01-01")
+  self.assertContains(self.client.get("/telemetry/?location=Canton"),"CHC-SW-01-01")
+  meraki=self.client.get("/telemetry/meraki/?location=Canton")
+  self.assertContains(meraki,"Cloud AP");self.assertNotContains(meraki,"CHC-SW-01-01")
+ def test_aliases_distinguish_same_model_and_preserve_alert_join(self):
+  devices=[dict(sample(),hostname="serial-b",meraki_integration_id=1,model="MR45",location_name="Ogdensburg"),dict(sample(),hostname="serial-a",meraki_integration_id=1,model="MR45",location_name="Ogdensburg")]
+  data.name_meraki_devices(devices)
+  self.assertEqual(devices[1]["monitoring_name"],"meraki-ogdensburg-mr45-01")
+  result=data.attach_alerts(devices,[dict(alert(),hostname="meraki-ogdensburg-mr45-01")])
+  self.assertEqual(result[1]["alert_status"],"CRITICAL")

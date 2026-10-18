@@ -22,17 +22,20 @@ def load():
 @login_required
 @never_cache
 @require_GET
-def overview(request):
+def overview(request,category="locations"):
     try:items,error=load()
     except Exception:
         logger.exception("Inventory read failed")
         return render(request,"inventory/error.html",status=503)
+    items=[d for d in items if bool(d.get("meraki_integration_id")) == (category=="meraki")]
     locations=sorted({d["location_name"] for d in items});query=request.GET.get("q","").strip();location=request.GET.get("location","");status=request.GET.get("status","")
     totals={"devices":len(items),"locations":len(locations),"problems":sum(d["alert_status"] in {"CRITICAL","WARNING"} for d in items),"unknown":sum(d["alert_status"]=="UNKNOWN" for d in items)}
     filtered=[d for d in items if (not location or d["location_name"]==location) and (not status or d["alert_status"]==status) and (not query or query.casefold() in " ".join(str(d.get(k) or "") for k in ["hostname","display_name","management_ip","model","serial_number","collector"]).casefold())]
     grouped=defaultdict(list)
     for d in filtered:grouped[d["location_name"]].append(d)
-    return render(request,"inventory/overview.html",{"groups":dict(grouped),"locations":locations,"totals":totals,"query":query,"location":location,"status_filter":status,"error":error,"now":datetime.now(timezone.utc),"shown":len(filtered),"meraki_health":data.integration_health()})
+    summaries=[{"name":loc,"count":sum(d["location_name"]==loc for d in filtered),"problems":sum(d["location_name"]==loc and d["alert_status"] in {"WARNING","CRITICAL"} for d in filtered)} for loc in sorted(grouped)]
+    browse=not (location or query or status)
+    return render(request,"inventory/overview.html",{"groups":{} if browse else dict(grouped),"browse":browse,"summaries":summaries,"category":category,"title":"Meraki" if category=="meraki" else "CP Locations","locations":locations,"totals":totals,"query":query,"location":location,"status_filter":status,"error":error,"now":datetime.now(timezone.utc),"shown":len(filtered),"meraki_health":data.integration_health() if category=="meraki" else []})
 
 @login_required
 @never_cache
