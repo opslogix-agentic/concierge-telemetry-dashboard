@@ -56,3 +56,5 @@ the previous token for rollback and do not broaden access to other tenants.
 `/telemetry/` opens CP Locations (collector devices); `/telemetry/meraki/` opens Meraki devices and organization health. Each starts with location summary cards; select a location to see devices. Search and status filters operate within the selected category. Device detail returns to its category and location.
 
 Meraki labels use `meraki-<location>-<model>`, with numeric suffixes for repeated models. Pilot monitoring aliases are pinned in `inventory/meraki_monitoring_aliases.json` and match Icinga object names; keep these aligned when adding monitoring hosts. API targets, database hostnames, serial identities, and collector assignments remain unchanged.
+
+Phase 4 pins monitoring aliases for all 58 approved non-MT Meraki devices, matching their individual Icinga availability checks. The held MT pilot alias remains reserved for later reactivation. Devices remain registered to their original tenant, location and collector. No vendor polling occurs in the dashboard or controller.
