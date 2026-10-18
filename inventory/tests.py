@@ -143,3 +143,9 @@ class CategoryTests(TestCase):
   self.assertEqual(devices[1]["monitoring_name"],"meraki-ogdensburg-mr45-01")
   result=data.attach_alerts(devices,[dict(alert(),hostname="meraki-ogdensburg-mr45-01")])
   self.assertEqual(result[1]["alert_status"],"CRITICAL")
+
+ def test_new_device_cannot_take_pinned_pilot_name(self):
+  devices=[dict(sample(),hostname="meraki-884814-q3aa-2hjm-paye",meraki_integration_id=1,model="MR45",location_name="Ogdensburg"),dict(sample(),hostname="earlier-new-device",meraki_integration_id=1,model="MR45",location_name="Ogdensburg")]
+  data.name_meraki_devices(devices)
+  self.assertEqual(devices[0]["monitoring_name"],"meraki-ogdensburg-mr45-01")
+  self.assertEqual(devices[1]["monitoring_name"],"meraki-ogdensburg-mr45-09")

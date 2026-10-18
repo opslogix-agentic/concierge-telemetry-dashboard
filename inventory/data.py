@@ -27,12 +27,21 @@ def name_meraki_devices(items):
             slug=lambda value: re.sub(r"[^a-z0-9]+","-",str(value).lower()).strip("-")
             base="meraki-"+slug(item["location_name"])+"-"+slug(item.get("model") or item.get("device_role") or "device")
             groups.setdefault(base,[]).append(item)
-    for base,members in groups.items():
-        for index,item in enumerate(sorted(members,key=lambda x:x["hostname"]),1):
-            item["monitoring_name"]=base+(f"-{index:02d}" if len(members)>1 else "")
     aliases=json.loads(Path(__file__).with_name("meraki_monitoring_aliases.json").read_text())
-    for item in items:
-        if item["hostname"] in aliases:item["monitoring_name"]=aliases[item["hostname"]]
+    reserved=set(aliases.values())
+    for base,members in groups.items():
+        index=1
+        for item in sorted(members,key=lambda x:x["hostname"]):
+            if item["hostname"] in aliases:
+                item["monitoring_name"]=aliases[item["hostname"]]
+                continue
+            candidate=base if len(members)==1 else f"{base}-{index:02d}"
+            while candidate in reserved:
+                index+=1
+                candidate=f"{base}-{index:02d}"
+            item["monitoring_name"]=candidate
+            reserved.add(candidate)
+            index+=1
     return items
 
 def devices():
