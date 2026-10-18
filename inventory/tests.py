@@ -138,10 +138,10 @@ class CategoryTests(TestCase):
   meraki=self.client.get("/telemetry/meraki/?location=Canton")
   self.assertContains(meraki,"Cloud AP");self.assertNotContains(meraki,"CHC-SW-01-01")
  def test_aliases_distinguish_same_model_and_preserve_alert_join(self):
-  devices=[dict(sample(),hostname="serial-b",meraki_integration_id=1,model="MR45",location_name="Ogdensburg"),dict(sample(),hostname="serial-a",meraki_integration_id=1,model="MR45",location_name="Ogdensburg")]
+  devices=[dict(sample(),hostname="serial-b",meraki_integration_id=1,model="MR45",location_name="Testtown"),dict(sample(),hostname="serial-a",meraki_integration_id=1,model="MR45",location_name="Testtown")]
   data.name_meraki_devices(devices)
-  self.assertEqual(devices[1]["monitoring_name"],"meraki-ogdensburg-mr45-01")
-  result=data.attach_alerts(devices,[dict(alert(),hostname="meraki-ogdensburg-mr45-01")])
+  self.assertEqual(devices[1]["monitoring_name"],"meraki-testtown-mr45-01")
+  result=data.attach_alerts(devices,[dict(alert(),hostname="meraki-testtown-mr45-01")])
   self.assertEqual(result[1]["alert_status"],"CRITICAL")
 
  def test_new_device_cannot_take_pinned_pilot_name(self):
