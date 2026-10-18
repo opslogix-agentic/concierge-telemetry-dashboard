@@ -121,6 +121,7 @@ def tables(device_id):
 def health(device):
     meraki=bool(device.get("meraki_integration_id"))
     resources=(["sensor-freshness","temperature","battery"] if device.get("device_role")=="sensor" else ["availability"]) if meraki else ["cpu","memory","temperature","fans","power"]
+    if meraki and str(device.get("model","")).startswith("MR"):resources=["availability","cpu-load","memory","power-mode","uplink"]
     kind="meraki" if meraki else "network"
     try:token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
     except OSError:return [{"resource":r,"status":"UNKNOWN","message":"Controller health credential is unavailable"} for r in resources]

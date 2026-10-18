@@ -149,3 +149,11 @@ class CategoryTests(TestCase):
   data.name_meraki_devices(devices)
   self.assertEqual(devices[0]["monitoring_name"],"meraki-ogdensburg-mr45-01")
   self.assertEqual(devices[1]["monitoring_name"],"meraki-ogdensburg-mr45-09")
+
+
+class MrViewTests(SimpleTestCase):
+ @patch('inventory.data.Path.read_text',side_effect=OSError)
+ def test_mr_only_gets_supported_device_health(self,_):
+  d=sample();d.update(meraki_integration_id=1,model='MR45')
+  self.assertEqual([r['resource'] for r in data.health(d)],['availability','cpu-load','memory','power-mode','uplink'])
+  d['model']='MX68W';self.assertEqual([r['resource'] for r in data.health(d)],['availability'])
