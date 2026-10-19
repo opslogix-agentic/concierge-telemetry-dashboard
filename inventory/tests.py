@@ -157,3 +157,20 @@ class MrViewTests(SimpleTestCase):
   d=sample();d.update(meraki_integration_id=1,model='MR45')
   self.assertEqual([r['resource'] for r in data.health(d)],['availability','cpu-load','memory','power-mode','uplink'])
   d['model']='MX68W';self.assertEqual([r['resource'] for r in data.health(d)],['availability'])
+
+class MerakiDisplayNameTests(SimpleTestCase):
+ def test_cloud_name_is_primary_label_without_changing_monitoring_identity(self):
+  from django.template.loader import render_to_string
+  d=sample()
+  d.update(display_name='CHC-AP-02-01 - Back Right',monitoring_name='meraki-malone-mr45-01',meraki_integration_id=1,alert_status='OK')
+  overview=render_to_string('inventory/overview.html',{'groups':{'Malone':[d]},'category':'meraki'})
+  detail=render_to_string('inventory/device.html',{'device':d})
+  self.assertIn('<h3>CHC-AP-02-01 - Back Right</h3>',overview)
+  self.assertIn('<h1>CHC-AP-02-01 - Back Right</h1>',detail)
+  self.assertEqual(d['monitoring_name'],'meraki-malone-mr45-01')
+  a=dict(alert(),hostname=d['monitoring_name'])
+  self.assertEqual(data.attach_alerts([d],[a])[0]['alert_status'],'CRITICAL')
+ def test_missing_cloud_name_falls_back_to_hostname(self):
+  from django.template.loader import render_to_string
+  d=sample()
+  self.assertIn('<h1>CHC-SW-01-01</h1>',render_to_string('inventory/device.html',{'device':d}))
