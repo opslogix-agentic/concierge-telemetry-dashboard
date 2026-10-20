@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample Meraki MR CPU telemetry every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+RandomizedDelaySec=10
+Unit=concierge-cpu-calibration.service
+
+[Install]
+WantedBy=timers.target

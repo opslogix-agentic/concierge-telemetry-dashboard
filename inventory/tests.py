@@ -174,3 +174,29 @@ class MerakiDisplayNameTests(SimpleTestCase):
   from django.template.loader import render_to_string
   d=sample()
   self.assertIn('<h1>CHC-SW-01-01</h1>',render_to_string('inventory/device.html',{'device':d}))
+
+class CpuCalibrationTests(SimpleTestCase):
+ @patch('inventory.management.commands.cpu_calibration.devices')
+ @patch('inventory.management.commands.cpu_calibration.rows')
+ def test_archive_deduplicates_and_pairs_only_exact_times(self, mock_rows, mock_devices):
+  import tempfile,sqlite3,json,io
+  from pathlib import Path
+  from django.core.management import call_command,CommandError
+  observed=datetime.now(timezone.utc).isoformat()
+  mock_devices.return_value=[{'meraki_integration_id':1,'meraki_serial':'SERIAL','model':'MR45','display_name':'AP'}]
+  payload={'collected_at':observed,'mr_observations':[{'serial':'SERIAL','observed_at':observed,'cpu_load5':2000,'cpu_count':4}]}
+  mock_rows.return_value=[{'integration_id':1,'snapshot_json':json.dumps({'payload':payload})}]
+  with tempfile.TemporaryDirectory() as folder:
+   db=Path(folder)/'samples.sqlite3';output=io.StringIO()
+   for _ in range(2):call_command('cpu_calibration',database=str(db),stdout=output)
+   with sqlite3.connect(db) as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM samples').fetchone()[0],1)
+   csv=Path(folder)/'ui.csv'
+   csv.write_text('integration_id,serial,observed_at,dashboard_value,unit,provenance\n1,SERIAL,'+observed+',50,percent,tooltip\n')
+   call_command('cpu_calibration',database=str(db),dashboard_csv=str(csv),stdout=output)
+   self.assertIn('median absolute error=0.0000',output.getvalue())
+   csv.write_text('integration_id,serial,observed_at,dashboard_value,unit,provenance\n1,SERIAL,2000-01-01T00:00:00Z,50,percent,tooltip\n')
+   with self.assertRaises(CommandError):call_command('cpu_calibration',database=str(db),dashboard_csv=str(csv),stdout=io.StringIO())
+   payload['mr_observations'][0]['observed_at']=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+   mock_rows.return_value=[{'integration_id':1,'snapshot_json':json.dumps({'payload':payload})}]
+   call_command('cpu_calibration',database=str(db),stdout=io.StringIO())
+   with sqlite3.connect(db) as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM samples').fetchone()[0],1)

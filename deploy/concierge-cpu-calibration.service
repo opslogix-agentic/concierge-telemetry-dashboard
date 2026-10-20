@@ -1,0 +1,19 @@
+[Unit]
+Description=Archive Meraki MR CPU samples for dashboard calibration
+After=network-online.target mariadb.service
+
+[Service]
+Type=oneshot
+User=telemetry
+Group=telemetry
+WorkingDirectory=/opt/telemetry/concierge-telemetry-dashboard
+EnvironmentFile=/etc/concierge-telemetry-dashboard/dashboard.env
+ExecStart=/opt/telemetry/dashboard-venv/bin/python manage.py cpu_calibration --database /var/lib/concierge-cpu-calibration/samples.sqlite3
+StateDirectory=concierge-cpu-calibration
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStartSec=60
