@@ -67,6 +67,7 @@ def alert_rows():
         a["hard_status"] = ("OK" if a["hard_code"]==0 else "CRITICAL" if a["hard_code"] is not None else "UNKNOWN") if host_check else LABELS.get(a["hard_code"],"UNKNOWN")
         a["updated"] = datetime.fromtimestamp(a["last_update"]/1000,timezone.utc) if a["last_update"] else None
         if a["code"] is None:a["status"]="UNKNOWN";a["output"]="No check result recorded"
+        a["suppressed"] = a["status"]=="OK" and "SUPPRESSED:" in str(a.get("output") or "")
         a["overdue"] = a["is_overdue"]=="y"
     return service+host
 
@@ -130,7 +131,7 @@ def health(device):
         url=settings.CONTROLLER_URL+"/api/v1/health/"+kind+"/"+quote(device["hostname"],safe="")+"/"+resource+"?"+scope
         try:
             with urlopen(Request(url,headers={"Authorization":"Bearer "+token}),timeout=4) as response:d=json.load(response)
-            return {"resource":resource,"status":d.get("status","UNKNOWN"),"message":"; ".join(x.get("message","") for x in d.get("checks",{}).values()),"details":json.dumps(d.get("details",[]),indent=2),"age":d.get("age_seconds")}
+            return {"resource":resource,"suppressed":bool(isinstance(d.get("details"),dict) and d["details"].get("suppressed")),"status":d.get("status","UNKNOWN"),"message":"; ".join(x.get("message","") for x in d.get("checks",{}).values()),"details":json.dumps(d.get("details",[]),indent=2),"age":d.get("age_seconds")}
         except Exception:return {"resource":resource,"status":"UNKNOWN","message":"Live controller health is unavailable"}
     with ThreadPoolExecutor(max_workers=5) as pool:return list(pool.map(get,resources))
 

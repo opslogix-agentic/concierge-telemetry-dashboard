@@ -218,3 +218,12 @@ class CpuHistoryTests(SimpleTestCase):
     result=data.estimated_cpu_history(d)
     self.assertEqual(result['count'],1);self.assertEqual(result['maximum'],125)
     self.assertEqual(len(result['segments']),1)
+
+
+class SensorSuppressionTests(SimpleTestCase):
+ def test_suppressed_sensor_checks_are_explicitly_labeled(self):
+  from django.template.loader import render_to_string
+  d=sample();d['meraki_integration_id']=1
+  d['alerts']=[dict(alert('OK'),suppressed=True)]
+  html=render_to_string('inventory/device.html',{'device':d,'health':[dict(resource='temperature',status='OK',suppressed=True,message='SUPPRESSED: battery 0%')]})
+  self.assertGreaterEqual(html.count('SUPPRESSED</span>'),2)
