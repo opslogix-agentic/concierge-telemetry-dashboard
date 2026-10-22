@@ -227,3 +227,4 @@ class SensorSuppressionTests(SimpleTestCase):
   d['alerts']=[dict(alert('OK'),suppressed=True)]
   html=render_to_string('inventory/device.html',{'device':d,'health':[dict(resource='temperature',status='OK',suppressed=True,message='SUPPRESSED: battery 0%')]})
   self.assertGreaterEqual(html.count('SUPPRESSED</span>'),2)
+  self.assertIn('SUPPRESSED · not evaluated',html)
