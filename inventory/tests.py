@@ -155,7 +155,7 @@ class MrViewTests(SimpleTestCase):
  @patch('inventory.data.Path.read_text',side_effect=OSError)
  def test_mr_only_gets_supported_device_health(self,_):
   d=sample();d.update(meraki_integration_id=1,model='MR45')
-  self.assertEqual([r['resource'] for r in data.health(d)],['availability','cpu-load','memory','power-mode','uplink'])
+  self.assertEqual([r['resource'] for r in data.health(d)],['availability','cpu-load','cpu-load-estimate','memory','power-mode','uplink'])
   d['model']='MX68W';self.assertEqual([r['resource'] for r in data.health(d)],['availability'])
 
 class MerakiDisplayNameTests(SimpleTestCase):
@@ -200,3 +200,21 @@ class CpuCalibrationTests(SimpleTestCase):
    mock_rows.return_value=[{'integration_id':1,'snapshot_json':json.dumps({'payload':payload})}]
    call_command('cpu_calibration',database=str(db),stdout=io.StringIO())
    with sqlite3.connect(db) as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM samples').fetchone()[0],1)
+
+class CpuHistoryTests(SimpleTestCase):
+ def test_history_is_scoped_preserves_over_100_and_handles_missing_archive(self):
+  import sqlite3,tempfile
+  from pathlib import Path
+  with tempfile.TemporaryDirectory() as folder:
+   path=Path(folder)/'samples.sqlite3'
+   with self.settings(CPU_CALIBRATION_DATABASE=str(path)):
+    d=dict(meraki_integration_id=1,meraki_serial='SERIAL',model='MR45')
+    self.assertTrue(data.estimated_cpu_history(d)['unavailable'])
+    self.assertFalse(path.exists())
+    with sqlite3.connect(path) as db:
+     db.execute('CREATE TABLE samples (integration INTEGER,serial TEXT,observed_at TEXT,cpu_load5 INTEGER,cpu_count INTEGER)')
+     db.execute('INSERT INTO samples VALUES (?,?,?,?,?)',(1,'SERIAL',(datetime.now(timezone.utc)-timedelta(minutes=10)).isoformat(),500000,4))
+     db.execute('INSERT INTO samples VALUES (?,?,?,?,?)',(2,'SERIAL',datetime.now(timezone.utc).isoformat(),1000000,4))
+    result=data.estimated_cpu_history(d)
+    self.assertEqual(result['count'],1);self.assertEqual(result['maximum'],125)
+    self.assertEqual(len(result['segments']),1)

@@ -50,4 +50,4 @@ def device(request,device_id):
     except Exception:
         logger.exception("Device inventory read failed");return render(request,"inventory/error.html",status=503)
     metadata=[(k.replace("_"," ").title(),v) for k,v in d.items() if k not in {"alerts","problem_count","alert_status","telemetry_stale","id","location_id","assigned_appliance_id","last_collected_by_appliance_id","tenant_uuid","location_uuid","meraki_integration_id","meraki_serial","meraki_collected_at","display_name"}]
-    return render(request,"inventory/device.html",{"device":d,"metadata":metadata,"tables":tables,"health":data.health(d),"error":error})
+    return render(request,"inventory/device.html",{"device":d,"metadata":metadata,"tables":tables,"health":data.health(d),"cpu_history":data.estimated_cpu_history(d),"error":error})

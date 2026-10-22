@@ -121,7 +121,7 @@ def tables(device_id):
 def health(device):
     meraki=bool(device.get("meraki_integration_id"))
     resources=(["sensor-freshness","temperature","battery"] if device.get("device_role")=="sensor" else ["availability"]) if meraki else ["cpu","memory","temperature","fans","power"]
-    if meraki and str(device.get("model","")).startswith("MR"):resources=["availability","cpu-load","memory","power-mode","uplink"]
+    if meraki and str(device.get("model","")).startswith("MR"):resources=["availability","cpu-load","cpu-load-estimate","memory","power-mode","uplink"]
     kind="meraki" if meraki else "network"
     try:token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
     except OSError:return [{"resource":r,"status":"UNKNOWN","message":"Controller health credential is unavailable"} for r in resources]
@@ -156,3 +156,40 @@ def integration_health():
             except Exception:pass
             cards.append(card)
     return cards
+
+
+def estimated_cpu_history(device):
+    """Read archived tenant-selected device data; graph the empirical estimate without alarms."""
+    if not device.get('meraki_integration_id') or not str(device.get('model','')).startswith('MR'):
+        return None
+    import sqlite3
+    import math
+    from datetime import timedelta
+    result={'segments':[], 'count':0, 'maximum':100, 'latest':None}
+    now=datetime.now(timezone.utc);start=now-timedelta(hours=24)
+    path=Path(getattr(settings,'CPU_CALIBRATION_DATABASE','/var/lib/concierge-cpu-calibration/samples.sqlite3'))
+    try:
+        with sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=1) as db:
+            samples=db.execute('SELECT observed_at,cpu_load5,cpu_count FROM samples WHERE integration=? AND serial=? AND observed_at>=? ORDER BY observed_at LIMIT 1000',
+                (device['meraki_integration_id'],device['meraki_serial'],start.isoformat())).fetchall()
+        segment=[];previous=None
+        parsed=[]
+        for stamp,raw,cores in samples:
+            observed=datetime.fromisoformat(stamp)
+            if observed.tzinfo is None or not start<=observed<=now or cores<=0 or raw<0:continue
+            value=raw/(1000*cores)
+            if not math.isfinite(value):continue
+            parsed.append((observed,value))
+        maximum=max(100,math.ceil(max((v for _,v in parsed),default=0)))
+        for observed,value in parsed:
+            if previous is not None and (observed-previous).total_seconds()>1800:
+                if segment:result['segments'].append(' '.join(segment))
+                segment=[]
+            x=40+(observed-start).total_seconds()/86400*720
+            y=160-value/maximum*140
+            segment.append(f'{x:.2f},{y:.2f}');previous=observed
+        if segment:result['segments'].append(' '.join(segment))
+        result.update(count=len(parsed),maximum=maximum,latest=parsed[-1][0] if parsed else None)
+    except (OSError,sqlite3.Error,ValueError,TypeError):
+        result['unavailable']=True
+    return result
