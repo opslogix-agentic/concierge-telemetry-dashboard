@@ -119,10 +119,18 @@ def tables(device_id):
         result.append({"title":title,"columns":[k.replace("_"," ").title() for k in keys],"rows":[[r[k] for k in keys] for r in records],"count":len(records)})
     return result
 
+def device_monitoring_policy(device):
+    # The controller owns the non-secret policy; both apps run on the same host.
+    path=Path(getattr(settings,"MERAKI_MONITORING_POLICY_FILE","/opt/telemetry/telemetry-controller/config/meraki-device-monitoring-overrides.json"))
+    try:return json.loads(path.read_text()).get(device.get("tenant_uuid"),{}).get(device.get("meraki_serial"),{})
+    except (OSError,ValueError):return {}
+
 def health(device):
     meraki=bool(device.get("meraki_integration_id"))
     resources=(["sensor-freshness","temperature","battery"] if device.get("device_role")=="sensor" else ["availability"]) if meraki else ["cpu","memory","temperature","fans","power"]
     if meraki and str(device.get("model","")).startswith("MR"):resources=["availability","cpu-load","cpu-load-estimate","memory","power-mode","uplink"]
+    if meraki and device_monitoring_policy(device).get("battery_monitoring") is False:
+        resources=[r for r in resources if r!="battery"]
     kind="meraki" if meraki else "network"
     try:token=Path(settings.MONITOR_TOKEN_FILE).read_text().strip()
     except OSError:return [{"resource":r,"status":"UNKNOWN","message":"Controller health credential is unavailable"} for r in resources]

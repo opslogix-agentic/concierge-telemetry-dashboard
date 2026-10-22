@@ -228,3 +228,12 @@ class SensorSuppressionTests(SimpleTestCase):
   html=render_to_string('inventory/device.html',{'device':d,'health':[dict(resource='temperature',status='OK',suppressed=True,message='SUPPRESSED: battery 0%')]})
   self.assertGreaterEqual(html.count('SUPPRESSED</span>'),2)
   self.assertIn('SUPPRESSED · not evaluated',html)
+
+class UsbSensorPolicyTests(SimpleTestCase):
+ @patch('inventory.data.Path.read_text')
+ def test_usb_sensor_omits_battery_even_when_live_credential_is_unavailable(self,read):
+  import json
+  policy={'tenant':{'SERIAL':{'battery_monitoring':False,'power_source':'usb'}}}
+  read.side_effect=[json.dumps(policy),OSError()]
+  d=dict(meraki_integration_id=1,device_role='sensor',tenant_uuid='tenant',meraki_serial='SERIAL')
+  self.assertEqual([x['resource'] for x in data.health(d)],['sensor-freshness','temperature'])
